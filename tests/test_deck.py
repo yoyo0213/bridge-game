@@ -1,5 +1,5 @@
-from bridge_game.card import Card, Rank, Suit
-from bridge_game.deck import Deck
+from bridge_game.cards.card import Card, Rank, Suit
+from bridge_game.cards.deck import Deck
 
 
 def test_card_has_expected_identity():
@@ -35,3 +35,13 @@ def test_deck_deal_handles_multiple_cards():
 
     assert [card.rank for card in dealt] == [Rank.ACE, Rank.KING, Rank.QUEEN, Rank.JACK, Rank.TEN]
     assert len(deck) == 47
+
+def test_deck_shuffle_changes_card_order():
+    deck = Deck()
+    original_order = deck.cards.copy()
+
+    deck.shuffle()
+
+    assert deck.cards != original_order
+    assert len(deck) == 52
+    assert set(deck.cards) == set(original_order)

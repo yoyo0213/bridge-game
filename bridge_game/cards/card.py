@@ -37,3 +37,22 @@ class Card:
 
     def __hash__(self):
         return hash((self.suit, self.rank))
+
+    def __str__(self):
+        suit_symbols = {
+            Suit.CLUBS: "♣",
+            Suit.DIAMONDS: "♦",
+            Suit.HEARTS: "♥",
+            Suit.SPADES: "♠",
+        }
+
+        rank_symbols = {
+            Rank.JACK: "J",
+            Rank.QUEEN: "Q",
+            Rank.KING: "K",
+            Rank.ACE: "A",
+        }
+
+        rank_text = rank_symbols.get(self.rank, str(self.rank.value))
+
+        return f"{rank_text}{suit_symbols[self.suit]}"
