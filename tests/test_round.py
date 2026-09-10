@@ -3,6 +3,8 @@ import pytest
 from bridge_game.cards.card import Card, Rank, Suit
 from bridge_game.game.round import Round
 from bridge_game.players.player import Player
+from bridge_game.game.bid import Bid, Strain
+from bridge_game.game.bidding_result import BiddingResult
 
 
 def create_players():
@@ -84,3 +86,52 @@ def test_trick_winner_leads_next_trick():
     assert len(round_.completed_tricks) == 1
     assert round_.current_player == players[1]
     assert round_.current_trick.leader == players[1]
+
+
+def test_round_accepts_bidding_result():
+    players = create_players()
+    round_ = Round(players)
+
+    result = BiddingResult(
+        Bid(4, Strain.HEARTS),
+        "P3",
+    )
+
+    round_.set_bidding_result(result)
+
+    assert round_.bidding_result == result
+    assert round_.bidder_id == "P3"
+    assert round_.bidder_target == 10
+    assert round_.opponent_target == 3
+    assert round_.trump == Suit.HEARTS
+    assert round_.current_trick.trump == Suit.HEARTS
+
+
+def test_round_supports_no_trump():
+    players = create_players()
+    round_ = Round(players)
+
+    result = BiddingResult(
+        Bid(3, Strain.NO_TRUMP),
+        "P1",
+    )
+
+    round_.set_bidding_result(result)
+
+    assert round_.trump is None
+    assert round_.current_trick.trump is None
+    assert round_.bidder_target == 9
+    assert round_.opponent_target == 4
+
+
+def test_round_rejects_all_pass_result():
+    players = create_players()
+    round_ = Round(players)
+
+    result = BiddingResult(
+        bid=None,
+        bidder_id=None,
+    )
+
+    with pytest.raises(ValueError):
+        round_.set_bidding_result(result)
