@@ -37,6 +37,37 @@ def test_first_card_sets_lead_suit():
     assert len(trick) == 1
 
 
+def test_leader_must_play_first():
+    players = create_players()
+    card = Card(Suit.HEARTS, Rank.TEN)
+    players[1].receive_card(card)
+
+    trick = Trick(players[0])
+
+    with pytest.raises(ValueError):
+        trick.play_card(players[1], card)
+
+    assert card in players[1].hand
+    assert len(trick) == 0
+
+
+def test_player_cannot_play_twice_in_same_trick():
+    players = create_players()
+    first_card = Card(Suit.HEARTS, Rank.TEN)
+    second_card = Card(Suit.HEARTS, Rank.JACK)
+    players[0].receive_card(first_card)
+    players[0].receive_card(second_card)
+
+    trick = Trick(players[0])
+    trick.play_card(players[0], first_card)
+
+    with pytest.raises(ValueError):
+        trick.play_card(players[0], second_card)
+
+    assert second_card in players[0].hand
+    assert len(trick) == 1
+
+
 def test_play_card_removes_card_from_player_hand():
     players = create_players()
 

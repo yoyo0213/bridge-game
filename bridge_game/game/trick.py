@@ -28,6 +28,12 @@ class Trick:
         if self.is_complete:
             raise ValueError("Trick is already complete")
 
+        if not self.plays and player != self.leader:
+            raise ValueError("The trick leader must play first")
+
+        if any(played_player == player for played_player, _ in self.plays):
+            raise ValueError("A player cannot play more than once in a trick")
+
         if not can_play_card(player.hand, card, self.lead_suit):
             raise ValueError("Illegal card")
 

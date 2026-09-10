@@ -15,6 +15,11 @@ def test_bidding_starts_with_first_player():
     assert bidding.finished is False
 
 
+def test_bidding_requires_unique_player_ids():
+    with pytest.raises(ValueError):
+        Bidding(["P1", "P2", "P3", "P1"])
+
+
 def test_turn_advances_after_bid():
     bidding = Bidding(PLAYERS)
 

@@ -1,3 +1,5 @@
+import pytest
+
 from bridge_game.game.bid import Bid, Strain
 from bridge_game.game.bidding_result import BiddingResult
 
@@ -77,3 +79,15 @@ def test_all_pass_has_no_contract():
     assert result.bidder_target is None
     assert result.opponent_target is None
     assert result.trump_strain is None
+
+
+@pytest.mark.parametrize(
+    ("bid", "bidder_id"),
+    [
+        (Bid(1, Strain.CLUBS), None),
+        (None, "P1"),
+    ],
+)
+def test_bid_and_bidder_must_be_present_together(bid, bidder_id):
+    with pytest.raises(ValueError):
+        BiddingResult(bid=bid, bidder_id=bidder_id)

@@ -6,7 +6,13 @@ from bridge_game.game.bid import Bid, Strain
 @dataclass(frozen=True)
 class BiddingResult:
     bid: Bid | None
-    bidder_id: str | None
+    bidder_id: object | None
+
+    def __post_init__(self):
+        if (self.bid is None) != (self.bidder_id is None):
+            raise ValueError(
+                "Bid and bidder_id must either both be set or both be None"
+            )
 
     @property
     def has_contract(self) -> bool:

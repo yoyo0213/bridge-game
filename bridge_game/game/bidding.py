@@ -6,6 +6,12 @@ class Bidding:
         if len(player_ids) != 4:
             raise ValueError("Bidding requires exactly 4 players")
 
+        if any(
+            player_id in player_ids[:index]
+            for index, player_id in enumerate(player_ids)
+        ):
+            raise ValueError("Bidding requires 4 unique player IDs")
+
         self.player_ids = list(player_ids)
         self.current_index = 0
 
@@ -78,4 +84,3 @@ class Bidding:
             bid=self.highest_bid,
             bidder_id=self.highest_bidder,
         )
-
