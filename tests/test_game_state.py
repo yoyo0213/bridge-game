@@ -1,0 +1,178 @@
+import pytest
+
+from bridge_game.cards.card import Card, Rank, Suit
+from bridge_game.game.game_state import GameState
+from bridge_game.game.round import Round
+from bridge_game.players.player import Player
+from bridge_game.players.team import Team
+
+
+def create_players_and_teams():
+    players = [
+        Player(1, "North", "North"),
+        Player(2, "East", "East"),
+        Player(3, "South", "South"),
+        Player(4, "West", "West"),
+    ]
+    teams = [
+        Team("North/South", players[0], players[2]),
+        Team("East/West", players[1], players[3]),
+    ]
+    return players, teams
+
+
+def create_completed_round(players):
+    ranks = [Rank.JACK, Rank.QUEEN, Rank.KING, Rank.ACE]
+    for player, rank in zip(players, ranks):
+        for _ in range(13):
+            player.receive_card(Card(Suit.CLUBS, rank))
+
+    round_ = Round(players)
+    for _ in range(52):
+        player = round_.current_player
+        round_.play_card(player, player.hand.cards[0])
+
+    return round_
+
+
+def test_game_state_initial_state():
+    players, teams = create_players_and_teams()
+
+    game_state = GameState(players, teams)
+
+    assert game_state.players == players
+    assert game_state.teams == teams
+    assert game_state.current_round_number == 1
+    assert game_state.current_round is None
+    assert game_state.is_finished is False
+
+
+def test_team_scores_initially_zero():
+    players, teams = create_players_and_teams()
+
+    game_state = GameState(players, teams)
+
+    assert game_state.team_scores == {
+        teams[0]: 0,
+        teams[1]: 0,
+    }
+
+
+@pytest.mark.parametrize("player_count", [3, 5])
+def test_game_state_requires_exactly_four_players(player_count):
+    players, teams = create_players_and_teams()
+    candidate_players = players + [Player(5, "Extra", "Extra")]
+
+    with pytest.raises(ValueError):
+        GameState(candidate_players[:player_count], teams)
+
+
+def test_game_state_rejects_duplicate_player_ids():
+    players, teams = create_players_and_teams()
+    players[3].player_id = players[0].player_id
+
+    with pytest.raises(ValueError):
+        GameState(players, teams)
+
+
+@pytest.mark.parametrize("team_count", [1, 3])
+def test_game_state_requires_exactly_two_teams(team_count):
+    players, teams = create_players_and_teams()
+    extra_team = Team("Extra", players[0], players[1])
+
+    with pytest.raises(ValueError):
+        GameState(players, (teams + [extra_team])[:team_count])
+
+
+def test_each_player_must_belong_to_exactly_one_team():
+    players, _ = create_players_and_teams()
+    invalid_teams = [
+        Team("One", players[0], players[1]),
+        Team("Two", players[1], players[2]),
+    ]
+
+    with pytest.raises(ValueError):
+        GameState(players, invalid_teams)
+
+
+@pytest.mark.parametrize("round_number", [1, 2, 3, 4])
+def test_game_state_accepts_valid_round_numbers(round_number):
+    players, teams = create_players_and_teams()
+
+    game_state = GameState(players, teams, current_round_number=round_number)
+
+    assert game_state.current_round_number == round_number
+
+
+@pytest.mark.parametrize("round_number", [0, 5])
+def test_game_state_rejects_out_of_range_round_numbers(round_number):
+    players, teams = create_players_and_teams()
+
+    with pytest.raises(ValueError):
+        GameState(players, teams, current_round_number=round_number)
+
+
+def test_game_state_rejects_non_integer_round_number():
+    players, teams = create_players_and_teams()
+
+    with pytest.raises(TypeError):
+        GameState(players, teams, current_round_number="1")
+
+
+def test_start_round_tracks_current_round():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams)
+    round_ = Round(players)
+
+    game_state.start_round(round_)
+
+    assert game_state.current_round is round_
+
+
+def test_start_round_rejects_different_players():
+    players, teams = create_players_and_teams()
+    other_players, _ = create_players_and_teams()
+    game_state = GameState(players, teams)
+
+    with pytest.raises(ValueError):
+        game_state.start_round(Round(other_players))
+
+
+def test_incomplete_round_cannot_be_completed():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams)
+    game_state.start_round(Round(players))
+
+    with pytest.raises(ValueError):
+        game_state.complete_current_round()
+
+    assert game_state.current_round_number == 1
+    assert game_state.is_finished is False
+
+
+def test_completing_round_advances_round_number_without_changing_scores():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams)
+    game_state.start_round(create_completed_round(players))
+
+    game_state.complete_current_round()
+
+    assert game_state.current_round_number == 2
+    assert game_state.current_round is None
+    assert game_state.team_scores == {teams[0]: 0, teams[1]: 0}
+    assert game_state.is_finished is False
+
+
+def test_completing_fourth_round_finishes_game():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams, current_round_number=4)
+    game_state.start_round(create_completed_round(players))
+
+    game_state.complete_current_round()
+
+    assert game_state.current_round_number == 4
+    assert game_state.current_round is None
+    assert game_state.is_finished is True
+
+    with pytest.raises(ValueError):
+        game_state.start_round(Round(players))
