@@ -60,8 +60,17 @@ class BaseScoringPolicy:
     """Assign round points to the player who earned each trick."""
 
     def calculate(self, context: ScoringContext) -> ScoringResult:
-        round_ = context.round_state
-        assignment = context.contract_assignment
+        return self.calculate_progress(
+            context.round_state,
+            context.contract_assignment,
+        )
+
+    def calculate_progress(
+        self,
+        round_: Round,
+        assignment: ContractAssignment,
+    ) -> ScoringResult:
+        """Return a side-effect-free score snapshot for completed tricks."""
         contract = assignment.bidding_team_target
         if contract not in CONTRACT_BONUSES:
             raise ValueError("Contract must be between 7 and 13")

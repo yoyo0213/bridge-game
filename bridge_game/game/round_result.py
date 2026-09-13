@@ -11,6 +11,7 @@ from bridge_game.players.team import Team
 class RoundResult:
     round_number: int
     contract_assignment: ContractAssignment
+    trump: object | None
     player_trick_counts: Mapping[object, int]
     player_round_scores: Mapping[object, int]
     contract_met: bool
@@ -108,6 +109,7 @@ def create_round_result(
     return RoundResult(
         round_number=round_number,
         contract_assignment=contract_assignment,
+        trump=round_.trump,
         player_trick_counts=scoring.player_trick_counts,
         player_round_scores=scoring.player_round_scores,
         contract_met=scoring.contract_met,

@@ -202,3 +202,24 @@ def test_scores_accumulate_across_rounds_without_being_reset():
 
     assert players[0].score == 150
     assert len(game_state.round_results) == 2
+
+
+def test_completed_trick_scores_immediately_and_only_once():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams)
+    round_ = Round(players)
+    round_.set_bidding_result(
+        BiddingResult(Bid(1, Strain.CLUBS), players[0].player_id)
+    )
+    game_state.start_round(round_)
+    for player in players:
+        rank = Rank.ACE if player is players[0] else Rank.TWO
+        card = Card(Suit.CLUBS, rank)
+        player.receive_card(card)
+        round_.play_card(player, card)
+
+    game_state.score_current_round_progress()
+    game_state.score_current_round_progress()
+
+    assert players[0].score == 10
+    assert [player.score for player in players[1:]] == [0, 0, 0]

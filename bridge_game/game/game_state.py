@@ -19,6 +19,7 @@ class GameState:
         self.current_round_number = current_round_number
         self.current_round = None
         self.round_results = []
+        self._applied_round_scores = None
         self.is_finished = False
 
     def start_round(self, round_: Round):
@@ -37,6 +38,34 @@ class GameState:
             raise ValueError("Round players must match the game players")
 
         self.current_round = round_
+        self._applied_round_scores = {
+            player.player_id: 0 for player in self.players
+        }
+
+    def score_current_round_progress(self):
+        if self.current_round is None:
+            raise ValueError("There is no current round to score")
+        if self.current_round.bidding_result is None:
+            raise ValueError("Cannot score a round without a bidding contract")
+
+        from bridge_game.game.scoring import BaseScoringPolicy
+
+        assignment = assign_contract_to_teams(
+            self.current_round.bidding_result,
+            self.players,
+            self.teams,
+        )
+        scoring = BaseScoringPolicy().calculate_progress(
+            self.current_round,
+            assignment,
+        )
+        players_by_id = {player.player_id: player for player in self.players}
+        for player_id, current_points in scoring.player_round_scores.items():
+            new_points = current_points - self._applied_round_scores[player_id]
+            if new_points:
+                players_by_id[player_id].add_score(new_points)
+        self._applied_round_scores = dict(scoring.player_round_scores)
+        return scoring
 
     def complete_current_round(self):
         if self.current_round is None:
@@ -58,12 +87,11 @@ class GameState:
             self.current_round_number,
             assignment,
         )
-        players_by_id = {player.player_id: player for player in self.players}
-        for player_id, points in result.player_round_scores.items():
-            players_by_id[player_id].add_score(points)
+        self.score_current_round_progress()
         self.round_results.append(result)
 
         self.current_round = None
+        self._applied_round_scores = None
 
         if self.current_round_number == self.ROUND_COUNT:
             self.is_finished = True
