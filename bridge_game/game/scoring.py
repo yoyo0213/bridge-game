@@ -4,6 +4,20 @@ from bridge_game.game.round import Round
 from bridge_game.game.round_result import RoundResult
 
 
+CONTRACT_BONUSES = {
+    7: 40,
+    8: 50,
+    9: 65,
+    10: 90,
+    11: 125,
+    12: 170,
+    13: 235,
+}
+CONTRACT_TRICK_POINTS = 10
+OVERTRICK_POINTS = 15
+DEFENDING_TRICK_POINTS = 15
+
+
 @dataclass(frozen=True)
 class ScoringContext:
     round_state: Round
@@ -12,13 +26,10 @@ class ScoringContext:
     def __post_init__(self):
         if not isinstance(self.round_state, Round):
             raise TypeError("round_state must be a Round")
-
         if not isinstance(self.round_result, RoundResult):
             raise TypeError("round_result must be a RoundResult")
-
         if not self.round_state.is_complete:
             raise ValueError("Scoring requires a completed round")
-
         if len(self.round_state.completed_tricks) != Round.TRICKS_PER_ROUND:
             raise ValueError("Scoring requires exactly 13 completed tricks")
 
@@ -34,87 +45,53 @@ class ScoringResult:
 
 
 class BaseScoringPolicy:
-    STANDARD_TRICK_POINTS = 2
-    POST_DECISION_TRICK_POINTS = 3
-    FOURTH_ROUND_TRICK_POINTS = 4
+    """Calculate both teams' scores for a completed round."""
 
     def calculate(self, context: ScoringContext) -> ScoringResult:
         round_result = context.round_result
-        assignment = round_result.contract_assignment
+        self._validate_trick_counts(context)
+        contract = round_result.bidding_team_target
+        if contract not in CONTRACT_BONUSES:
+            raise ValueError("Contract must be between 7 and 13")
+        bidding_tricks = round_result.bidding_team_trick_count
 
-        bidding_tricks = 0
-        opposing_tricks = 0
-        bidding_score = 0
-        opposing_score = 0
-
-        decided = self._is_decided(
-            bidding_tricks,
-            opposing_tricks,
-            round_result,
-        )
-
-        for trick in context.round_state.completed_tricks:
-            winner = trick.winner()
-            winner_is_bidding_team = self._winner_is_bidding_team(
-                winner,
-                assignment,
+        if bidding_tricks < contract:
+            bidding_score = bidding_tricks * CONTRACT_TRICK_POINTS
+        else:
+            bidding_score = (
+                contract * CONTRACT_TRICK_POINTS
+                + CONTRACT_BONUSES[contract]
+                + (bidding_tricks - contract) * OVERTRICK_POINTS
             )
-
-            if round_result.round_number == 4:
-                trick_points = self.FOURTH_ROUND_TRICK_POINTS
-            elif decided:
-                trick_points = self.POST_DECISION_TRICK_POINTS
-            else:
-                trick_points = self.STANDARD_TRICK_POINTS
-
-            if winner_is_bidding_team:
-                bidding_tricks += 1
-                bidding_score += trick_points
-            else:
-                opposing_tricks += 1
-                opposing_score += trick_points
-
-            decided = self._is_decided(
-                bidding_tricks,
-                opposing_tricks,
-                round_result,
-            )
-
-        if (
-            bidding_tricks != round_result.bidding_team_trick_count
-            or opposing_tricks != round_result.opposing_team_trick_count
-        ):
-            raise ValueError("RoundResult trick counts do not match the round")
 
         return ScoringResult(
             bidding_team_score_delta=bidding_score,
-            opposing_team_score_delta=opposing_score,
+            opposing_team_score_delta=(
+                round_result.opposing_team_trick_count * DEFENDING_TRICK_POINTS
+            ),
         )
 
     @staticmethod
-    def _is_decided(bidding_tricks, opposing_tricks, round_result):
-        tricks_played = bidding_tricks + opposing_tricks
-        remaining_tricks = Round.TRICKS_PER_ROUND - tricks_played
+    def _validate_trick_counts(context: ScoringContext) -> None:
+        assignment = context.round_result.contract_assignment
+        bidding_tricks = 0
+        opposing_tricks = 0
+        for trick in context.round_state.completed_tricks:
+            winner = trick.winner()
+            winner_teams = [
+                team
+                for team in (assignment.bidding_team, assignment.opposing_team)
+                if winner in team
+            ]
+            if len(winner_teams) != 1:
+                raise ValueError("Each trick winner must belong to exactly one team")
+            if winner_teams[0] is assignment.bidding_team:
+                bidding_tricks += 1
+            else:
+                opposing_tricks += 1
 
-        bidding_success_decided = (
-            bidding_tricks >= round_result.bidding_team_target
-        )
-        bidding_failure_decided = (
-            bidding_tricks + remaining_tricks
-            < round_result.bidding_team_target
-        )
-
-        return bidding_success_decided or bidding_failure_decided
-
-    @staticmethod
-    def _winner_is_bidding_team(winner, assignment):
-        winner_teams = [
-            team
-            for team in (assignment.bidding_team, assignment.opposing_team)
-            if team.player1 is winner or team.player2 is winner
-        ]
-
-        if len(winner_teams) != 1:
-            raise ValueError("Each trick winner must belong to exactly one team")
-
-        return winner_teams[0] is assignment.bidding_team
+        if (
+            bidding_tricks != context.round_result.bidding_team_trick_count
+            or opposing_tricks != context.round_result.opposing_team_trick_count
+        ):
+            raise ValueError("RoundResult trick counts do not match the round")
