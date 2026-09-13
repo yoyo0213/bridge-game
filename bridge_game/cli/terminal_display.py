@@ -1,3 +1,7 @@
+from bridge_game.cli.hand_view import sorted_hand_view
+from bridge_game.game.rules import can_play_card
+
+
 class TerminalDisplay:
     def __init__(self, output_fn=print):
         self.output = output_fn
@@ -10,7 +14,7 @@ class TerminalDisplay:
         player = players_by_id[bidding.current_player]
         self.output(f"Your total score: {player.score}")
         self.output("Your hand:")
-        for index, card in enumerate(player.hand.cards, start=1):
+        for index, card in enumerate(sorted_hand_view(player.hand), start=1):
             self.output(f"  [{index}] {card}")
         self.output("Bidding actions:")
         for player_id, bid in bidding.history:
@@ -61,8 +65,14 @@ class TerminalDisplay:
         )
         self.output(f"Cards played: {plays or 'None'}")
         self.output("Your hand:")
-        for index, card in enumerate(player.hand.cards, start=1):
-            self.output(f"  [{index}] {card}")
+        for index, card in enumerate(sorted_hand_view(player.hand), start=1):
+            marker = (
+                "*"
+                if can_play_card(player.hand, card, round_.current_trick.lead_suit)
+                else " "
+            )
+            self.output(f"{marker} [{index}] {card}")
+        self.output("* = legal card")
 
     def trick_result(
         self,

@@ -1,14 +1,25 @@
 from bridge_game.game.bid import Bid, Strain
+from bridge_game.cli.hand_view import sorted_hand_view
 
 
 class TerminalInput:
     STRAINS = {
+        "c": Strain.CLUBS,
         "clubs": Strain.CLUBS,
+        "1": Strain.CLUBS,
+        "d": Strain.DIAMONDS,
         "diamonds": Strain.DIAMONDS,
+        "2": Strain.DIAMONDS,
+        "h": Strain.HEARTS,
         "hearts": Strain.HEARTS,
+        "3": Strain.HEARTS,
+        "s": Strain.SPADES,
         "spades": Strain.SPADES,
+        "4": Strain.SPADES,
+        "n": Strain.NO_TRUMP,
         "no trump": Strain.NO_TRUMP,
         "nt": Strain.NO_TRUMP,
+        "5": Strain.NO_TRUMP,
     }
 
     def __init__(self, input_fn=input, output_fn=print):
@@ -42,6 +53,7 @@ class TerminalInput:
                 self.output(f"Invalid bid: {error}")
 
     def choose_and_play_card(self, round_, player):
+        hand_view = sorted_hand_view(player.hand)
         while True:
             raw_value = self.input("Choose card: ").strip()
             try:
@@ -49,11 +61,11 @@ class TerminalInput:
             except ValueError:
                 self.output("Invalid input. Please enter a number.")
                 continue
-            if not 1 <= card_number <= len(player.hand):
+            if not 1 <= card_number <= len(hand_view):
                 self.output("Invalid card number.")
                 continue
 
-            card = player.hand.cards[card_number - 1]
+            card = hand_view[card_number - 1]
             try:
                 return round_.play_card(player, card)
             except ValueError:
@@ -66,21 +78,26 @@ class TerminalInput:
 
     def _read_contract(self):
         while True:
-            raw_value = self.input("Contract (7-13): ").strip()
+            raw_value = self.input("Bidding number (1-7): ").strip()
             try:
-                contract = int(raw_value)
+                contract = int(raw_value) + 6
             except ValueError:
                 self.output("Invalid input. Please enter a number.")
                 continue
             if 7 <= contract <= 13:
                 return contract
-            self.output("Contract must be between 7 and 13.")
+            self.output("Bidding number must be between 1 and 7.")
 
     def _read_strain(self):
         while True:
-            value = self.input(
-                "Strain (Clubs/Diamonds/Hearts/Spades/No Trump): "
-            ).strip().lower()
+            self.output("Choose trump:")
+            self.output("[C] Clubs")
+            self.output("[D] Diamonds")
+            self.output("[H] Hearts")
+            self.output("[S] Spades")
+            self.output("[N] No Trump")
+            value = self.input("> ").strip().lower()
             if value in self.STRAINS:
                 return self.STRAINS[value]
-            self.output("Invalid strain.")
+            self.output("Invalid trump.")
+            self.output("Please enter C, D, H, S, or N.")

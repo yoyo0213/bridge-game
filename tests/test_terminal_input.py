@@ -1,5 +1,6 @@
 from bridge_game.cards.card import Card, Rank, Suit
 from bridge_game.cli.terminal_input import TerminalInput
+from bridge_game.game.bid import Bid, Strain
 from bridge_game.game.bidding import Bidding
 from bridge_game.game.round import Round
 from bridge_game.players.player import Player
@@ -32,7 +33,7 @@ def test_non_numeric_and_out_of_range_card_inputs_do_not_change_state():
     original_cards = list(east.hand.cards)
     messages = []
 
-    terminal_input(["abc", "20", "2"], messages).choose_and_play_card(
+    terminal_input(["abc", "20", "1"], messages).choose_and_play_card(
         round_, east
     )
 
@@ -49,7 +50,7 @@ def test_follow_suit_failure_keeps_card_and_same_player_turn():
     heart = east.hand.cards[0]
     messages = []
 
-    terminal_input(["1", "2"], messages).choose_and_play_card(round_, east)
+    terminal_input(["2", "1"], messages).choose_and_play_card(round_, east)
 
     assert "Invalid card." in messages
     assert "You must follow Clubs." in messages
@@ -84,3 +85,43 @@ def test_terminal_bidding_uses_core_bidding_and_produces_contract():
     assert bidding.result.bidder_id == "N"
     assert bidding.result.bidder_target == 9
     assert bidding.result.bid.strain.name == "NO_TRUMP"
+
+
+def test_bidding_accepts_case_insensitive_strain_initial():
+    bidding = Bidding(["N", "E", "S", "W"])
+
+    terminal_input(["bid", "7", "s"], []).take_bidding_turn(
+        bidding, Player("N", "North", "North")
+    )
+
+    assert bidding.highest_bid == Bid(1, Strain.SPADES)
+
+
+def test_bidding_keeps_original_numeric_strain_order():
+    bidding = Bidding(["N", "E", "S", "W"])
+
+    terminal_input(["bid", "7", "3"], []).take_bidding_turn(
+        bidding, Player("N", "North", "North")
+    )
+
+    assert bidding.highest_bid == Bid(1, Strain.HEARTS)
+
+
+def test_invalid_trump_reprompts_without_crashing():
+    messages = []
+    controls = terminal_input(["X", "ABC", "6", "n"], messages)
+
+    assert controls._read_strain() == Strain.NO_TRUMP
+    assert messages.count("Invalid trump.") == 3
+    assert messages.count("Please enter C, D, H, S, or N.") == 3
+
+
+def test_card_number_selects_from_sorted_hand_view():
+    round_, players = make_round_waiting_for_east()
+    east = players[1]
+    club = east.hand.cards[1]
+
+    terminal_input(["1"], []).choose_and_play_card(round_, east)
+
+    assert club not in east.hand
+    assert east.hand.cards == [Card(Suit.HEARTS, Rank.ACE)]
