@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Mapping
 
 from bridge_game.game.contract_assignment import ContractAssignment
 from bridge_game.game.round import Round
@@ -9,37 +11,44 @@ from bridge_game.players.team import Team
 class RoundResult:
     round_number: int
     contract_assignment: ContractAssignment
-    bidding_team_trick_count: int
-    opposing_team_trick_count: int
+    player_trick_counts: Mapping[object, int]
+    player_round_scores: Mapping[object, int]
+    contract_met: bool
+    contract_bonus_awarded: bool
 
     def __post_init__(self):
         if not isinstance(self.contract_assignment, ContractAssignment):
             raise TypeError("contract_assignment must be a ContractAssignment")
-
         if not isinstance(self.round_number, int):
             raise TypeError("Round number must be an integer")
-
         if not 1 <= self.round_number <= 4:
             raise ValueError("Round number must be between 1 and 4")
+        if sum(self.player_trick_counts.values()) != Round.TRICKS_PER_ROUND:
+            raise ValueError("Player trick counts must sum to 13")
+        if any(count < 0 for count in self.player_trick_counts.values()):
+            raise ValueError("Player trick counts cannot be negative")
+        if any(score < 0 for score in self.player_round_scores.values()):
+            raise ValueError("Player round scores cannot be negative")
+        if set(self.player_trick_counts) != set(self.player_round_scores):
+            raise ValueError("Trick counts and scores must contain the same players")
+        object.__setattr__(
+            self,
+            "player_trick_counts",
+            MappingProxyType(dict(self.player_trick_counts)),
+        )
+        object.__setattr__(
+            self,
+            "player_round_scores",
+            MappingProxyType(dict(self.player_round_scores)),
+        )
 
-        if not isinstance(self.bidding_team_trick_count, int):
-            raise TypeError("Bidding team trick count must be an integer")
+    @property
+    def contract(self) -> int:
+        return self.contract_assignment.bidding_team_target
 
-        if not isinstance(self.opposing_team_trick_count, int):
-            raise TypeError("Opposing team trick count must be an integer")
-
-        if self.bidding_team_trick_count < 0:
-            raise ValueError("Bidding team trick count cannot be negative")
-
-        if self.opposing_team_trick_count < 0:
-            raise ValueError("Opposing team trick count cannot be negative")
-
-        if (
-            self.bidding_team_trick_count
-            + self.opposing_team_trick_count
-            != Round.TRICKS_PER_ROUND
-        ):
-            raise ValueError("Team trick counts must sum to 13")
+    @property
+    def bidder(self):
+        return self.contract_assignment.bidder
 
     @property
     def bidding_team(self) -> Team:
@@ -51,15 +60,29 @@ class RoundResult:
 
     @property
     def bidding_team_target(self) -> int:
-        return self.contract_assignment.bidding_team_target
+        return self.contract
 
     @property
     def opposing_team_target(self) -> int:
         return self.contract_assignment.opposing_team_target
 
     @property
+    def bidding_team_trick_count(self) -> int:
+        return sum(
+            self.player_trick_counts[player.player_id]
+            for player in (self.bidding_team.player1, self.bidding_team.player2)
+        )
+
+    @property
+    def opposing_team_trick_count(self) -> int:
+        return sum(
+            self.player_trick_counts[player.player_id]
+            for player in (self.opposing_team.player1, self.opposing_team.player2)
+        )
+
+    @property
     def bidding_team_met_target(self) -> bool:
-        return self.bidding_team_trick_count >= self.bidding_team_target
+        return self.contract_met
 
     @property
     def opposing_team_met_target(self) -> bool:
@@ -71,38 +94,22 @@ def create_round_result(
     round_number: int,
     contract_assignment: ContractAssignment,
 ) -> RoundResult:
-    completed_trick_count = len(round_.completed_tricks)
-    if completed_trick_count != Round.TRICKS_PER_ROUND:
+    if len(round_.completed_tricks) != Round.TRICKS_PER_ROUND:
         raise ValueError("Round must contain exactly 13 completed tricks")
-
     if not round_.is_complete:
         raise ValueError("Cannot create a result for an incomplete round")
 
-    bidding_count = 0
-    opposing_count = 0
+    # Local import keeps scoring independent while avoiding a module cycle.
+    from bridge_game.game.scoring import BaseScoringPolicy, ScoringContext
 
-    for trick in round_.completed_tricks:
-        winner = trick.winner()
-        winner_teams = [
-            team
-            for team in (
-                contract_assignment.bidding_team,
-                contract_assignment.opposing_team,
-            )
-            if team.player1 is winner or team.player2 is winner
-        ]
-
-        if len(winner_teams) != 1:
-            raise ValueError("Each trick winner must belong to exactly one team")
-
-        if winner_teams[0] is contract_assignment.bidding_team:
-            bidding_count += 1
-        else:
-            opposing_count += 1
-
+    scoring = BaseScoringPolicy().calculate(
+        ScoringContext(round_, contract_assignment)
+    )
     return RoundResult(
         round_number=round_number,
         contract_assignment=contract_assignment,
-        bidding_team_trick_count=bidding_count,
-        opposing_team_trick_count=opposing_count,
+        player_trick_counts=scoring.player_trick_counts,
+        player_round_scores=scoring.player_round_scores,
+        contract_met=scoring.contract_met,
+        contract_bonus_awarded=scoring.contract_bonus_awarded,
     )

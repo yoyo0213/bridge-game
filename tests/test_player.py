@@ -9,6 +9,7 @@ def test_player_creation():
     assert player.name == "Alice"
     assert player.position == "North"
     assert len(player.hand) == 0
+    assert player.score == 0
 
 
 def test_player_can_receive_card():
@@ -31,3 +32,11 @@ def test_player_can_play_card():
     assert played_card == card
     assert card not in player.hand
     assert len(player.hand) == 0
+
+
+def test_player_scores_are_independent():
+    players = [Player(index, str(index), str(index)) for index in range(4)]
+
+    players[0].add_score(100)
+
+    assert [player.score for player in players] == [100, 0, 0, 0]

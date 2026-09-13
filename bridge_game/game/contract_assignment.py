@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 
 from bridge_game.game.bidding_result import BiddingResult
+from bridge_game.players.player import Player
 from bridge_game.players.team import Team
 
 
 @dataclass(frozen=True)
 class ContractAssignment:
+    bidder: Player
     bidding_team: Team
     opposing_team: Team
     bidding_team_target: int
@@ -43,6 +45,7 @@ def assign_contract_to_teams(
     opposing_team = teams[1] if teams[0] is bidding_team else teams[0]
 
     return ContractAssignment(
+        bidder=bidder,
         bidding_team=bidding_team,
         opposing_team=opposing_team,
         bidding_team_target=result.bidder_target,

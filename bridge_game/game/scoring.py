@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Mapping
 
+from bridge_game.game.contract_assignment import ContractAssignment
 from bridge_game.game.round import Round
-from bridge_game.game.round_result import RoundResult
 
 
 CONTRACT_BONUSES = {
@@ -21,13 +23,13 @@ DEFENDING_TRICK_POINTS = 15
 @dataclass(frozen=True)
 class ScoringContext:
     round_state: Round
-    round_result: RoundResult
+    contract_assignment: ContractAssignment
 
     def __post_init__(self):
         if not isinstance(self.round_state, Round):
             raise TypeError("round_state must be a Round")
-        if not isinstance(self.round_result, RoundResult):
-            raise TypeError("round_result must be a RoundResult")
+        if not isinstance(self.contract_assignment, ContractAssignment):
+            raise TypeError("contract_assignment must be a ContractAssignment")
         if not self.round_state.is_complete:
             raise ValueError("Scoring requires a completed round")
         if len(self.round_state.completed_tricks) != Round.TRICKS_PER_ROUND:
@@ -36,62 +38,74 @@ class ScoringContext:
 
 @dataclass(frozen=True)
 class ScoringResult:
-    bidding_team_score_delta: int
-    opposing_team_score_delta: int
+    player_trick_counts: Mapping[object, int]
+    player_round_scores: Mapping[object, int]
+    contract_met: bool
+    contract_bonus_awarded: bool
 
-    @property
-    def total_score_delta(self) -> int:
-        return self.bidding_team_score_delta + self.opposing_team_score_delta
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "player_trick_counts",
+            MappingProxyType(dict(self.player_trick_counts)),
+        )
+        object.__setattr__(
+            self,
+            "player_round_scores",
+            MappingProxyType(dict(self.player_round_scores)),
+        )
 
 
 class BaseScoringPolicy:
-    """Calculate both teams' scores for a completed round."""
+    """Assign round points to the player who earned each trick."""
 
     def calculate(self, context: ScoringContext) -> ScoringResult:
-        round_result = context.round_result
-        self._validate_trick_counts(context)
-        contract = round_result.bidding_team_target
+        round_ = context.round_state
+        assignment = context.contract_assignment
+        contract = assignment.bidding_team_target
         if contract not in CONTRACT_BONUSES:
             raise ValueError("Contract must be between 7 and 13")
-        bidding_tricks = round_result.bidding_team_trick_count
 
-        if bidding_tricks < contract:
-            bidding_score = bidding_tricks * CONTRACT_TRICK_POINTS
-        else:
-            bidding_score = (
-                contract * CONTRACT_TRICK_POINTS
-                + CONTRACT_BONUSES[contract]
-                + (bidding_tricks - contract) * OVERTRICK_POINTS
-            )
+        player_tricks = {player.player_id: 0 for player in round_.players}
+        player_scores = {player.player_id: 0 for player in round_.players}
+        contract_team_tricks = 0
+        bonus_awarded = False
+
+        for trick in round_.completed_tricks:
+            winner = trick.winner()
+            winner_team = self._team_for_player(winner, assignment)
+            player_tricks[winner.player_id] += 1
+
+            if winner_team is assignment.bidding_team:
+                contract_team_tricks += 1
+                points = (
+                    CONTRACT_TRICK_POINTS
+                    if contract_team_tricks <= contract
+                    else OVERTRICK_POINTS
+                )
+                player_scores[winner.player_id] += points
+                if contract_team_tricks == contract:
+                    player_scores[assignment.bidder.player_id] += (
+                        CONTRACT_BONUSES[contract]
+                    )
+                    bonus_awarded = True
+            else:
+                player_scores[winner.player_id] += DEFENDING_TRICK_POINTS
 
         return ScoringResult(
-            bidding_team_score_delta=bidding_score,
-            opposing_team_score_delta=(
-                round_result.opposing_team_trick_count * DEFENDING_TRICK_POINTS
-            ),
+            player_trick_counts=player_tricks,
+            player_round_scores=player_scores,
+            contract_met=contract_team_tricks >= contract,
+            contract_bonus_awarded=bonus_awarded,
         )
 
     @staticmethod
-    def _validate_trick_counts(context: ScoringContext) -> None:
-        assignment = context.round_result.contract_assignment
-        bidding_tricks = 0
-        opposing_tricks = 0
-        for trick in context.round_state.completed_tricks:
-            winner = trick.winner()
-            winner_teams = [
-                team
-                for team in (assignment.bidding_team, assignment.opposing_team)
-                if winner in team
-            ]
-            if len(winner_teams) != 1:
-                raise ValueError("Each trick winner must belong to exactly one team")
-            if winner_teams[0] is assignment.bidding_team:
-                bidding_tricks += 1
-            else:
-                opposing_tricks += 1
-
-        if (
-            bidding_tricks != context.round_result.bidding_team_trick_count
-            or opposing_tricks != context.round_result.opposing_team_trick_count
-        ):
-            raise ValueError("RoundResult trick counts do not match the round")
+    def _team_for_player(player, assignment):
+        teams = [
+            team
+            for team in (assignment.bidding_team, assignment.opposing_team)
+            if player in team
+        ]
+        if len(teams) != 1:
+            raise ValueError("Each trick winner must belong to exactly one team")
+        return teams[0]

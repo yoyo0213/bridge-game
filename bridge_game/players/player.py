@@ -7,6 +7,26 @@ class Player:
         self.name = name
         self.position = position
         self.hand = Hand()
+        self._score = 0
+
+    @property
+    def score(self):
+        return self._score
+
+    @score.setter
+    def score(self, value):
+        if not isinstance(value, int):
+            raise TypeError("Score must be an integer")
+        if value < 0:
+            raise ValueError("Score cannot be negative")
+        self._score = value
+
+    def add_score(self, points):
+        if not isinstance(points, int):
+            raise TypeError("Score points must be an integer")
+        if points < 0:
+            raise ValueError("Score points cannot be negative")
+        self._score += points
 
     def receive_card(self, card):
         self.hand.add(card)

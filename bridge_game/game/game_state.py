@@ -1,4 +1,7 @@
 from bridge_game.game.round import Round
+from bridge_game.game.contract_assignment import assign_contract_to_teams
+from bridge_game.game.final_result import create_final_result
+from bridge_game.game.round_result import create_round_result
 
 
 class GameState:
@@ -15,7 +18,7 @@ class GameState:
         self.teams = list(teams)
         self.current_round_number = current_round_number
         self.current_round = None
-        self.team_scores = {team: 0 for team in self.teams}
+        self.round_results = []
         self.is_finished = False
 
     def start_round(self, round_: Round):
@@ -42,12 +45,38 @@ class GameState:
         if not self.current_round.is_complete:
             raise ValueError("Cannot complete a round while it is still in progress")
 
+        if self.current_round.bidding_result is None:
+            raise ValueError("Cannot score a round without a bidding contract")
+
+        assignment = assign_contract_to_teams(
+            self.current_round.bidding_result,
+            self.players,
+            self.teams,
+        )
+        result = create_round_result(
+            self.current_round,
+            self.current_round_number,
+            assignment,
+        )
+        players_by_id = {player.player_id: player for player in self.players}
+        for player_id, points in result.player_round_scores.items():
+            players_by_id[player_id].add_score(points)
+        self.round_results.append(result)
+
         self.current_round = None
 
         if self.current_round_number == self.ROUND_COUNT:
             self.is_finished = True
         else:
             self.current_round_number += 1
+
+        return result
+
+    @property
+    def final_result(self):
+        if not self.is_finished:
+            raise ValueError("Final result is only available after four rounds")
+        return create_final_result(self.players, self.teams)
 
     @classmethod
     def _validate_players(cls, players):

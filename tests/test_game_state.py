@@ -1,6 +1,8 @@
 import pytest
 
 from bridge_game.cards.card import Card, Rank, Suit
+from bridge_game.game.bid import Bid, Strain
+from bridge_game.game.bidding_result import BiddingResult
 from bridge_game.game.game_state import GameState
 from bridge_game.game.round import Round
 from bridge_game.players.player import Player
@@ -21,16 +23,21 @@ def create_players_and_teams():
     return players, teams
 
 
-def create_completed_round(players):
-    ranks = [Rank.JACK, Rank.QUEEN, Rank.KING, Rank.ACE]
-    for player, rank in zip(players, ranks):
-        for _ in range(13):
-            player.receive_card(Card(Suit.CLUBS, rank))
-
+def create_completed_round(players, winners=None, contract=7):
+    winners = winners or [players[3]] * 13
     round_ = Round(players)
-    for _ in range(52):
-        player = round_.current_player
-        round_.play_card(player, player.hand.cards[0])
+    round_.set_bidding_result(
+        BiddingResult(
+            Bid(contract - 6, Strain.CLUBS), players[0].player_id
+        )
+    )
+    for desired_winner in winners:
+        for _ in range(4):
+            player = round_.current_player
+            rank = Rank.ACE if player is desired_winner else Rank.TWO
+            card = Card(Suit.CLUBS, rank)
+            player.receive_card(card)
+            round_.play_card(player, card)
 
     return round_
 
@@ -47,15 +54,13 @@ def test_game_state_initial_state():
     assert game_state.is_finished is False
 
 
-def test_team_scores_initially_zero():
+def test_player_scores_initially_zero_and_team_has_no_score_state():
     players, teams = create_players_and_teams()
 
-    game_state = GameState(players, teams)
+    GameState(players, teams)
 
-    assert game_state.team_scores == {
-        teams[0]: 0,
-        teams[1]: 0,
-    }
+    assert all(player.score == 0 for player in players)
+    assert all(not hasattr(team, "score") for team in teams)
 
 
 @pytest.mark.parametrize("player_count", [3, 5])
@@ -150,16 +155,18 @@ def test_incomplete_round_cannot_be_completed():
     assert game_state.is_finished is False
 
 
-def test_completing_round_advances_round_number_without_changing_scores():
+def test_completing_round_applies_individual_scores_and_advances_round():
     players, teams = create_players_and_teams()
     game_state = GameState(players, teams)
     game_state.start_round(create_completed_round(players))
 
-    game_state.complete_current_round()
+    result = game_state.complete_current_round()
 
     assert game_state.current_round_number == 2
     assert game_state.current_round is None
-    assert game_state.team_scores == {teams[0]: 0, teams[1]: 0}
+    assert players[3].score == 195
+    assert all(player.score == 0 for player in players[:3])
+    assert game_state.round_results == [result]
     assert game_state.is_finished is False
 
 
@@ -176,3 +183,22 @@ def test_completing_fourth_round_finishes_game():
 
     with pytest.raises(ValueError):
         game_state.start_round(Round(players))
+
+
+def test_scores_accumulate_across_rounds_without_being_reset():
+    players, teams = create_players_and_teams()
+    game_state = GameState(players, teams)
+
+    round_one_winners = [players[0]] * 6 + [players[2]] + [players[1]] * 6
+    game_state.start_round(create_completed_round(players, round_one_winners))
+    game_state.complete_current_round()
+    assert players[0].score == 100
+
+    round_two_winners = [players[0]] * 5 + [players[1]] * 8
+    game_state.start_round(
+        create_completed_round(players, round_two_winners, contract=9)
+    )
+    game_state.complete_current_round()
+
+    assert players[0].score == 150
+    assert len(game_state.round_results) == 2

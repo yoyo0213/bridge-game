@@ -1,20 +1,11 @@
-from dataclasses import FrozenInstanceError
-
 import pytest
 
 from bridge_game.cards.card import Card, Rank, Suit
 from bridge_game.game.bid import Bid, Strain
 from bridge_game.game.bidding_result import BiddingResult
 from bridge_game.game.contract_assignment import assign_contract_to_teams
-from bridge_game.game.game_state import GameState
 from bridge_game.game.round import Round
 from bridge_game.game.round_result import create_round_result
-from bridge_game.game.scoring import (
-    CONTRACT_BONUSES,
-    BaseScoringPolicy,
-    ScoringContext,
-    ScoringResult,
-)
 from bridge_game.players.player import Player
 from bridge_game.players.team import Team
 
@@ -45,96 +36,77 @@ def create_completed_round(players, winners):
     return round_
 
 
-def create_scoring_context(bidding_tricks, contract=7, round_number=1):
+def result_for(winner_indexes, contract=7):
     players, teams = create_players_and_teams()
-    bidding_result = BiddingResult(
-        Bid(contract - 6, Strain.CLUBS), players[0].player_id
+    assignment = assign_contract_to_teams(
+        BiddingResult(Bid(contract - 6, Strain.CLUBS), players[0].player_id),
+        players,
+        teams,
     )
-    assignment = assign_contract_to_teams(bidding_result, players, teams)
-    winners = [teams[0].player1] * bidding_tricks + [
-        teams[1].player1
-    ] * (13 - bidding_tricks)
+    winners = [players[index] for index in winner_indexes]
     round_ = create_completed_round(players, winners)
-    result = create_round_result(round_, round_number, assignment)
-    return ScoringContext(round_, result), players, teams
+    return create_round_result(round_, 1, assignment), players, teams
 
 
-def score(context):
-    return BaseScoringPolicy().calculate(context)
+def test_contract_trick_points_belong_to_individual_winner():
+    result, players, _ = result_for([0] + [1] * 12)
+    assert result.player_round_scores[players[0].player_id] == 10
+    assert result.player_round_scores[players[2].player_id] == 0
 
 
-@pytest.mark.parametrize(
-    ("contract", "bidding_tricks", "expected"),
-    [
-        (7, 6, 60),
-        (7, 7, 110),
-        (7, 8, 125),
-        (9, 9, 155),
-        (9, 10, 170),
-        (13, 13, 365),
-    ],
-)
-def test_contract_team_scoring(contract, bidding_tricks, expected):
-    context, _, _ = create_scoring_context(bidding_tricks, contract)
-    assert score(context).bidding_team_score_delta == expected
+def test_contract_partners_keep_independent_scores():
+    result, players, _ = result_for([0] * 4 + [2] * 2 + [1] * 7)
+    assert result.player_round_scores[players[0].player_id] == 40
+    assert result.player_round_scores[players[2].player_id] == 20
 
 
-@pytest.mark.parametrize(
-    ("defending_tricks", "expected"), [(0, 0), (4, 60), (6, 90)]
-)
-def test_defending_team_scores_fifteen_per_trick(defending_tricks, expected):
-    context, _, _ = create_scoring_context(13 - defending_tricks)
-    assert score(context).opposing_team_score_delta == expected
+def test_contract_bonus_goes_to_bidder_not_seventh_trick_winner():
+    result, players, _ = result_for([0] * 6 + [2] + [1] * 6)
+    assert result.player_round_scores[players[0].player_id] == 100
+    assert result.player_round_scores[players[2].player_id] == 10
+    assert result.contract_bonus_awarded is True
 
 
-def test_contract_bonus_table_is_defined_once():
-    assert CONTRACT_BONUSES == {
-        7: 40,
-        8: 50,
-        9: 65,
-        10: 90,
-        11: 125,
-        12: 170,
-        13: 235,
-    }
+def test_overtrick_gives_fifteen_to_its_winner():
+    result, players, _ = result_for([0] * 7 + [2] + [1] * 5)
+    assert result.player_round_scores[players[2].player_id] == 15
 
 
-def test_round_number_does_not_change_scoring():
-    first, _, _ = create_scoring_context(8, round_number=1)
-    fourth, _, _ = create_scoring_context(8, round_number=4)
-    assert score(first) == score(fourth) == ScoringResult(125, 75)
+def test_contract_nine_combines_partner_tricks_but_keeps_scores_separate():
+    result, players, _ = result_for([0] * 5 + [2] * 4 + [1] * 4, contract=9)
+    assert result.player_round_scores[players[0].player_id] == 115
+    assert result.player_round_scores[players[2].player_id] == 40
+    assert result.bidding_team_trick_count == 9
+    assert result.contract_met is True
 
 
-def test_scoring_rejects_round_result_that_does_not_match_round():
-    context, _, _ = create_scoring_context(7)
-    mismatched_result = type(context.round_result)(
-        round_number=context.round_result.round_number,
-        contract_assignment=context.round_result.contract_assignment,
-        bidding_team_trick_count=8,
-        opposing_team_trick_count=5,
-    )
-    with pytest.raises(ValueError, match="do not match"):
-        score(ScoringContext(context.round_state, mismatched_result))
+def test_unmade_contract_keeps_trick_points_without_bonus():
+    result, players, _ = result_for([0] * 5 + [2] * 3 + [1] * 5, contract=9)
+    assert result.player_round_scores[players[0].player_id] == 50
+    assert result.player_round_scores[players[2].player_id] == 30
+    assert result.contract_bonus_awarded is False
 
 
-def test_scoring_does_not_mutate_domain_inputs_or_game_state():
-    context, players, teams = create_scoring_context(7)
-    game_state = GameState(players, teams)
-    completed_tricks = list(context.round_state.completed_tricks)
-    player_state = [player.__dict__.copy() for player in players]
-    team_state = [team.__dict__.copy() for team in teams]
-    result = score(context)
-    assert context.round_state.completed_tricks == completed_tricks
-    assert [player.__dict__ for player in players] == player_state
-    assert [team.__dict__ for team in teams] == team_state
-    assert game_state.team_scores == {teams[0]: 0, teams[1]: 0}
-    assert result == ScoringResult(110, 90)
+def test_defenders_score_individually():
+    result, players, _ = result_for([0] * 9 + [1] * 3 + [3], contract=9)
+    assert result.player_round_scores[players[1].player_id] == 45
+    assert result.player_round_scores[players[3].player_id] == 15
 
 
-def test_scoring_context_and_result_are_immutable():
-    context, _, _ = create_scoring_context(7)
-    result = score(context)
-    with pytest.raises(FrozenInstanceError):
-        context.round_result = None
-    with pytest.raises(FrozenInstanceError):
-        result.bidding_team_score_delta = 0
+def test_contract_bonus_is_awarded_only_once_with_overtricks():
+    result, players, _ = result_for([0] * 7 + [2] * 3 + [1] * 3)
+    assert result.player_round_scores[players[0].player_id] == 110
+    assert result.player_round_scores[players[2].player_id] == 45
+    assert sum(result.player_round_scores.values()) == 200
+
+
+def test_creating_round_result_does_not_mutate_player_totals():
+    result, players, _ = result_for([0] * 7 + [1] * 6)
+    assert result.player_round_scores[players[0].player_id] == 110
+    assert all(player.score == 0 for player in players)
+
+
+def test_round_score_mappings_are_immutable():
+    result, players, _ = result_for([0] * 7 + [1] * 6)
+    with pytest.raises(TypeError):
+        result.player_round_scores[players[0].player_id] = 0
