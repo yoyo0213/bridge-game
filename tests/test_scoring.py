@@ -48,22 +48,24 @@ def result_for(winner_indexes, contract=7):
     return create_round_result(round_, 1, assignment), players, teams
 
 
-def test_contract_trick_points_belong_to_individual_winner():
+def test_bidding_team_scores_nothing_when_contract_is_not_met():
     result, players, _ = result_for([0] + [1] * 12)
-    assert result.player_round_scores[players[0].player_id] == 10
+    assert result.player_round_scores[players[0].player_id] == 0
     assert result.player_round_scores[players[2].player_id] == 0
+    assert result.contract_met is False
 
 
-def test_contract_partners_keep_independent_scores():
+def test_bidding_team_tricks_score_nothing_before_contract_is_met():
     result, players, _ = result_for([0] * 4 + [2] * 2 + [1] * 7)
-    assert result.player_round_scores[players[0].player_id] == 40
-    assert result.player_round_scores[players[2].player_id] == 20
+    assert result.player_round_scores[players[0].player_id] == 0
+    assert result.player_round_scores[players[2].player_id] == 0
+    assert result.contract_met is False
 
 
 def test_contract_bonus_goes_to_bidder_not_seventh_trick_winner():
     result, players, _ = result_for([0] * 6 + [2] + [1] * 6)
-    assert result.player_round_scores[players[0].player_id] == 100
-    assert result.player_round_scores[players[2].player_id] == 10
+    assert result.player_round_scores[players[0].player_id] == 120
+    assert result.player_round_scores[players[2].player_id] == 0
     assert result.contract_bonus_awarded is True
 
 
@@ -74,16 +76,17 @@ def test_overtrick_gives_fifteen_to_its_winner():
 
 def test_contract_nine_combines_partner_tricks_but_keeps_scores_separate():
     result, players, _ = result_for([0] * 5 + [2] * 4 + [1] * 4, contract=9)
-    assert result.player_round_scores[players[0].player_id] == 115
-    assert result.player_round_scores[players[2].player_id] == 40
+    assert result.player_round_scores[players[0].player_id] == 200
+    assert result.player_round_scores[players[2].player_id] == 0
     assert result.bidding_team_trick_count == 9
     assert result.contract_met is True
 
 
-def test_unmade_contract_keeps_trick_points_without_bonus():
+def test_unmade_contract_scores_no_points_for_bidding_team():
     result, players, _ = result_for([0] * 5 + [2] * 3 + [1] * 5, contract=9)
-    assert result.player_round_scores[players[0].player_id] == 50
-    assert result.player_round_scores[players[2].player_id] == 30
+    assert result.player_round_scores[players[0].player_id] == 0
+    assert result.player_round_scores[players[2].player_id] == 0
+    assert result.contract_met is False
     assert result.contract_bonus_awarded is False
 
 
@@ -95,14 +98,14 @@ def test_defenders_score_individually():
 
 def test_contract_bonus_is_awarded_only_once_with_overtricks():
     result, players, _ = result_for([0] * 7 + [2] * 3 + [1] * 3)
-    assert result.player_round_scores[players[0].player_id] == 110
+    assert result.player_round_scores[players[0].player_id] == 120
     assert result.player_round_scores[players[2].player_id] == 45
-    assert sum(result.player_round_scores.values()) == 200
+    assert sum(result.player_round_scores.values()) == 210
 
 
 def test_creating_round_result_does_not_mutate_player_totals():
     result, players, _ = result_for([0] * 7 + [1] * 6)
-    assert result.player_round_scores[players[0].player_id] == 110
+    assert result.player_round_scores[players[0].player_id] == 120
     assert all(player.score == 0 for player in players)
 
 

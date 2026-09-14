@@ -7,15 +7,15 @@ from bridge_game.game.round import Round
 
 
 CONTRACT_BONUSES = {
-    7: 40,
-    8: 50,
-    9: 65,
-    10: 90,
-    11: 125,
-    12: 170,
-    13: 235,
+    7: 120,
+    8: 150,
+    9: 200,
+    10: 270,
+    11: 400,
+    12: 600,
+    13: 900,
 }
-CONTRACT_TRICK_POINTS = 10
+CONTRACT_TRICK_POINTS = 0
 OVERTRICK_POINTS = 15
 DEFENDING_TRICK_POINTS = 15
 

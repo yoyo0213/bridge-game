@@ -192,7 +192,7 @@ def test_scores_accumulate_across_rounds_without_being_reset():
     round_one_winners = [players[0]] * 6 + [players[2]] + [players[1]] * 6
     game_state.start_round(create_completed_round(players, round_one_winners))
     game_state.complete_current_round()
-    assert players[0].score == 100
+    assert players[0].score == 120
 
     round_two_winners = [players[0]] * 5 + [players[1]] * 8
     game_state.start_round(
@@ -200,11 +200,11 @@ def test_scores_accumulate_across_rounds_without_being_reset():
     )
     game_state.complete_current_round()
 
-    assert players[0].score == 150
+    assert players[0].score == 120
     assert len(game_state.round_results) == 2
 
 
-def test_completed_trick_scores_immediately_and_only_once():
+def test_bidding_team_trick_scores_nothing_before_contract_is_met():
     players, teams = create_players_and_teams()
     game_state = GameState(players, teams)
     round_ = Round(players)
@@ -221,5 +221,5 @@ def test_completed_trick_scores_immediately_and_only_once():
     game_state.score_current_round_progress()
     game_state.score_current_round_progress()
 
-    assert players[0].score == 10
+    assert players[0].score == 0
     assert [player.score for player in players[1:]] == [0, 0, 0]

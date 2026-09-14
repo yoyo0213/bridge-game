@@ -65,7 +65,7 @@ def test_terminal_game_completes_four_rounds_and_builds_final_result():
     assert len(game.game_state.round_results) == 4
     assert len(display.rounds) == 4
     assert display.final is result
-    assert game.players[0].score == 800
-    assert result.individual_scores[game.players[0].player_id] == 800
-    assert result.team_scores[game.teams[0]] == 800
+    assert game.players[0].score == 840
+    assert result.individual_scores[game.players[0].player_id] == 840
+    assert result.team_scores[game.teams[0]] == 840
     assert result.winning_team is game.teams[0]

@@ -74,7 +74,7 @@ def test_terminal_bidding_uses_core_bidding_and_produces_contract():
     players = ["N", "E", "S", "W"]
     bidding = Bidding(players)
     controls = terminal_input(
-        ["bid", "9", "no trump", "pass", "pass", "pass"], []
+        ["bid", "3", "no trump", "pass", "pass", "pass"], []
     )
 
     while not bidding.finished:
@@ -90,7 +90,7 @@ def test_terminal_bidding_uses_core_bidding_and_produces_contract():
 def test_bidding_accepts_case_insensitive_strain_initial():
     bidding = Bidding(["N", "E", "S", "W"])
 
-    terminal_input(["bid", "7", "s"], []).take_bidding_turn(
+    terminal_input(["bid", "1", "s"], []).take_bidding_turn(
         bidding, Player("N", "North", "North")
     )
 
@@ -100,7 +100,7 @@ def test_bidding_accepts_case_insensitive_strain_initial():
 def test_bidding_keeps_original_numeric_strain_order():
     bidding = Bidding(["N", "E", "S", "W"])
 
-    terminal_input(["bid", "7", "3"], []).take_bidding_turn(
+    terminal_input(["bid", "1", "3"], []).take_bidding_turn(
         bidding, Player("N", "North", "North")
     )
 
